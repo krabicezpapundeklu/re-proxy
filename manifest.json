@@ -1,0 +1,15 @@
+{
+    "manifest_version": 2,
+    "name": "Re-Proxy",
+    "version": "1.0",
+    "background": {
+        "scripts": [
+            "main.js"
+        ]
+    },
+    "permissions": [
+        "<all_urls>",
+        "webRequest",
+        "webRequestBlocking"
+    ]
+}
