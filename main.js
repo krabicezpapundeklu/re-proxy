@@ -1,7 +1,7 @@
 const SOURCE = 'https://XXX-XXX/XXX';
 const TARGET = 'c:/XXX/webapp';
 
-const READ_FROM_TARGET_IF_URL_MATCHES = /\.(css|js)$/;
+const READ_FROM_TARGET_IF_PATH_MATCHES = /\.(css|js)$/;
 
 const REQUEST_HANDLERS = [
     {
@@ -31,8 +31,8 @@ if (typeof chrome !== 'undefined') {
             }
         }
 
-        if (typeof READ_FROM_TARGET_IF_URL_MATCHES !== 'undefined') {
-            if (path.match(READ_FROM_TARGET_IF_URL_MATCHES)) {
+        if (typeof READ_FROM_TARGET_IF_PATH_MATCHES !== 'undefined') {
+            if (path.match(READ_FROM_TARGET_IF_PATH_MATCHES)) {
                 redirect = true;
             }
         }
