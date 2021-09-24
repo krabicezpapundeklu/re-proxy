@@ -1,18 +1,20 @@
-const SOURCE = 'https://XXX-XXX/XXX';
-const TARGET = 'c:/XXX/webapp';
-
-const READ_FROM_TARGET_IF_PATH_MATCHES = /\.(css|js)$/;
-
-const REQUEST_HANDLERS = [
+const CONFIGS = [
     {
-        method: 'get', pathPattern: /\/XXX$/, handler: (req, res) => {
-            res.json({fakeData: []});
-        }
-    },
-    {
-        method: 'post', pathPattern: /\/XXX$/, handler: (req, res) => {
-            res.json({fakeData: []});
-        }
+        prefix: 'https://XXX-XXX/XXX/',
+        target: 'c:/XXX/webapp',
+        readFromTargetIfPathMatches: /\.(css|js)$/,
+        overrides: [
+            {
+                method: 'get', path: '/XXX', handler: (req, res) => {
+                    res.json({fakeData: []});
+                }
+            },
+            {
+                method: 'post', path: '/XXX', handler: (req, res) => {
+                    res.json({fakeData: []});
+                }
+            }
+        ]
     }
 ];
 
@@ -20,27 +22,39 @@ const TARGET_PORT = 3000;
 const TARGET_HOST = `http://localhost:${TARGET_PORT}`;
 
 if (typeof chrome !== 'undefined') {
-    chrome.webRequest.onBeforeRequest.addListener(details => {
-        let path = new URL(details.url).pathname;
-        let redirect = false;
+    const sourceUrls = CONFIGS.map(config => config.prefix + '*');
 
-        for (const handler of REQUEST_HANDLERS) {
-            if (path.match(handler.pathPattern)) {
-                redirect = true;
+    chrome.webRequest.onBeforeRequest.addListener(details => {
+        for (let configId = 0; configId < CONFIGS.length; ++configId) {
+            const config = CONFIGS[configId];
+
+            if (details.url.startsWith(config.prefix)) {
+                const path = details.url.substr(config.prefix.length - 1).replace(/[?#].*/, '');
+                let redirect = false;
+
+                if (config.overrides) {
+                    for (const override of config.overrides) {
+                        if (override.path === path) {
+                            redirect = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!redirect && config.target && config.readFromTargetIfPathMatches) {
+                    if (path.match(config.readFromTargetIfPathMatches)) {
+                        redirect = true;
+                    }
+                }
+
+                if (redirect) {
+                    return {redirectUrl: `${TARGET_HOST}/${configId}${path}`};
+                }
+
                 break;
             }
         }
-
-        if (typeof READ_FROM_TARGET_IF_PATH_MATCHES !== 'undefined') {
-            if (path.match(READ_FROM_TARGET_IF_PATH_MATCHES)) {
-                redirect = true;
-            }
-        }
-
-        if (redirect) {
-            return {redirectUrl: TARGET_HOST + details.url.substr(SOURCE.length)};
-        }
-    }, {urls: [SOURCE + '*']}, ['blocking']);
+    }, {urls: sourceUrls}, ['blocking']);
 
     chrome.webRequest.onHeadersReceived.addListener(details => {
         let headers = details.responseHeaders;
@@ -53,7 +67,7 @@ if (typeof chrome !== 'undefined') {
         }
 
         return {responseHeaders: headers};
-    }, {urls: [SOURCE + '*']}, ['blocking', 'responseHeaders']);
+    }, {urls: sourceUrls}, ['blocking', 'responseHeaders']);
 } else {
     const express = require('express');
     const cors = require('cors');
@@ -64,12 +78,20 @@ if (typeof chrome !== 'undefined') {
 
     app.use(cors());
 
-    for (const handler of REQUEST_HANDLERS) {
-        app[handler.method](handler.pathPattern, handler.handler);
+    for (let configId = 0; configId < CONFIGS.length; ++configId) {
+        const config = CONFIGS[configId];
+
+        if (config.overrides) {
+            for (const override of config.overrides) {
+                app[override.method](`/${configId}${override.path}`, override.handler);
+            }
+        }
     }
 
-    app.get(/.*/, (req, res) => {
-        const targetPath = path.join(TARGET, req.path);
+    app.get(/\/\d+\/.+/, (req, res) => {
+        const match = req.path.match(/\/(\d+)(\/.+)/);
+        const config = CONFIGS[match[1]];
+        const targetPath = path.join(config.target, match[2]);
 
         if (req.path.endsWith('.css') || req.path.endsWith('.js')) {
             const mapPath = targetPath + '.map';
